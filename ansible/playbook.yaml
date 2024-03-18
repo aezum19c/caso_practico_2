@@ -1,0 +1,56 @@
+---
+- hosts: servers
+  become: true
+  vars:
+    ansible_become_pass: "{{ ubuntu02_sudo_pass }}"
+  tasks:
+  - name: installing podman
+    package:
+      name: "podman"
+      state: present
+  - name: installing skopeo
+    package:
+      name: "skopeo"
+      state: present
+  - name: get accesToken from acr (previous az login required)
+    shell: az acr login --name registrycp2 --expose-token --output tsv --query accessToken
+    register: acr_token
+    ignore_errors: true
+    delegate_to: 127.0.0.1
+  - name: podman login into acr
+    containers.podman.podman_login:
+      username: 00000000-0000-0000-0000-000000000000
+      password: "{{ acr_token.stdout }}"
+      registry: registrycp2.azurecr.io
+  - name: copy image frontend from public repository to own acr
+    shell: skopeo copy docker://mcr.microsoft.com/azuredocs/azure-vote-front:v1 docker://registrycp2.azurecr.io/azure-vote-front:v1
+    ignore_errors: true
+  - name: copy image backend from public repository to own acr
+    shell: skopeo copy docker://mcr.microsoft.com/oss/bitnami/redis:6.0.8 docker://registrycp2.azurecr.io/redis:6.0.8
+    ignore_errors: true
+  - name: run container back
+    containers.podman.podman_container:
+      name: redis-cp2
+      image: registrycp2.azurecr.io/redis:6.0.8
+      state: started
+      recreate: true
+      detach: true
+      exposed_ports:
+        - 6379
+      ports:
+        - 6379:3679
+      volumes: /tmp:/bitnami/redis/data
+      env:
+        ALLOW_EMPTY_PASSWORD: "yes"
+  - name: run container front
+    containers.podman.podman_container:
+      name: front-cp2
+      image: registrycp2.azurecr.io/azure-vote-front:v1
+      state: started
+      detach: true
+      exposed_ports:
+        - 80
+      ports:
+        - 8080:80
+      env:
+        REDIS: "redis-cp2"

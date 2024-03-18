@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "backend"
+  namespace: "unircp2"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "backend"
+  template:
+    metadata:
+      labels:
+        app: "backend"
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - name: "backend"
+        image: "registrycp2.azurecr.io/redis:6.0.8"
+        env:
+        - name: ALLO_EMPTY_PASSWORD
+          value: "yes"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        ports:
+        - containerPort: 6379
+          name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "backend"
+  namespace: "unircp2"
+spec:
+  ports:
+  -  port: 6379
+  selector:
+    app: "backend"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "frontend"
+  namespace: "unircp2"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "frontend"
+  template:
+    metadata:
+      labels:
+        app: "frontend"
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - name: "frontend"
+        image: "registrycp2.azurecr.io/azure-vote-front:v1"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+        ports:
+        - containerPort: 80
+        env:
+        - name: REDIS
+          value: "backend"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "frontend"
+  namespace: "unircp2"
+spec:
+  type: LoadBalancer
+  ports:
+  -  port: 80
+  selector:
+    app: "frontend"
